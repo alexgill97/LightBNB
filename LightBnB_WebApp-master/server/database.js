@@ -85,7 +85,7 @@ const getAllReservations = function(guest_id, limit = 10) {
     ORDER BY reservations.start_date
     LIMIT $2;`, [guest_id, limit])
     .then((result) => {
-      console.log("++++++++++", result.rows);
+      console.log(result.rows);
       return result.rows;
     })
     .catch((err) => {
@@ -105,12 +105,49 @@ exports.getAllReservations = getAllReservations;
 
 
 const getAllProperties = (options, limit = 10) => {
+  const queryParams = [];
+  let queryString = `
+    SELECT properties.*, AVG(rating) AS average_rating
+    FROM properties
+    LEFT OUTER JOIN property_reviews ON property_reviews.property_id = properties.id 
+  `;
+  if (options.city) {
+    queryParams.push(`%${options.city}%`);
+    queryString += `WHERE city LIKE $${queryParams.length} `;
+  }
+  if (options.owner_id) {
+    queryString += (queryParams.length) ? 'AND ' : 'WHERE ';
+    queryParams.push(options.owner_id);
+    queryString += `owner_id = $${queryParams.length}`;
+  }
+  if (options.minimum_price_per_night) {
+    queryString += (queryParams.length) ? 'AND ' : 'WHERE ';
+    queryParams.push(options.minimum_price_per_night);
+    queryString += `cost_per_night >= $${queryParams.length} `;
+  }
+  if (options.maximum_price_per_night) {
+    queryString += (queryParams.length) ? 'AND ' : 'WHERE ';
+    queryParams.push(options.maximum_price_per_night);
+    queryString += `cost_per_night <= $${queryParams.length} `;
+  }
+
+  queryString += `GROUP BY properties.id `;
+  if (options.minimum_rating) {
+    queryParams.push(options.minimum_rating);
+    queryString += `HAVING AVG(RATING) >= $${queryParams.length} `;
+  }
+
+  queryParams.push(limit);
+  queryString += `
+  ORDER BY cost_per_night
+  LIMIT $${queryParams.length};
+  `;
   return pool
-    .query(`SELECT * FROM properties LIMIT $1`, [limit])
-    .then((result) => {
+    .query(queryString, queryParams)
+    .then((result)=>{
       return result.rows;
     })
-    .catch((err) => {
+    .catch((err)=>{
       console.log(err.message);
     });
 };
